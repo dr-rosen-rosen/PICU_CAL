@@ -1,3 +1,6 @@
 default:
     py_version: "python3/bin/python"
-    
+    E4_db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/Data_Analysis/PICU_CAL/E4_Data/'
+    E4_db_name: 'PICU_E4_data.db'
+    E4_download_path: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
+    shift_tracking_file: 'PICU_Shift_Upload_Tracking.csv'
