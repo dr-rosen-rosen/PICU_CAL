@@ -1,3 +1,6 @@
+# Virtual environment
+/python3/
+
 # History files
 .Rhistory
 .Rapp.history
