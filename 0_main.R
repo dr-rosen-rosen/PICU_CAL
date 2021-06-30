@@ -7,7 +7,7 @@ library(here)
 
 debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
-Sys.setenv(R_CONFIG_ACTIVE = "default") # 'default')#
+Sys.setenv(R_CONFIG_ACTIVE = "custom_process") # 'default')#
 config <- config::get()
 Sys.setenv(RETICULATE_PYTHON = config$py_version)
 reticulate::source_python('1_funcs.py')
@@ -38,6 +38,15 @@ raw_E4_to_db(
 get_e4_SH(
   db_loc = config$E4_db_loc,
   db_name = config$E4_db_name,
+  tracking_file_loc = config$tracking_file_loc,
+  tracking_file = config$tracking_file,
+  download_path = config$E4_download_path,
+  load_EDA = TRUE,
+  load_HR = TRUE,
+  load_ACC = TRUE,
+  load_Temp = TRUE,
+  load_IBI = TRUE,
+  load_BVP = TRUE
 )
 
 get_RTLS(
@@ -45,6 +54,5 @@ get_RTLS(
   db_name = config$RTLS_db_name,
   tracking_file_loc = config$tracking_file_loc,
   tracking_file = config$tracking_file
-  
 )
 
