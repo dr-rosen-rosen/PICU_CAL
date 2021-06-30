@@ -30,6 +30,21 @@ raw_E4_to_db(
   load_IBI = TRUE,
   load_BVP = TRUE,
   download_path = config$E4_download_path,
-  shift_tracking_file = config$shift_tracking_file
+  tracking_file_loc = config$tracking_file_loc,
+  tracking_file = config$tracking_file
 )
 # Pull lightly processed data for SH
+
+get_e4_SH(
+  db_loc = config$E4_db_loc,
+  db_name = config$E4_db_name,
+)
+
+get_RTLSH(
+  db_loc = config$RTLS_db_loc,
+  db_name = config$RTLS_db_name,
+  tracking_file_loc = config$tracking_file_loc,
+  tracking_file = config$tracking_file
+  
+)
+

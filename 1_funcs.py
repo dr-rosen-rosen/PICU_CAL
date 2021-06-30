@@ -13,6 +13,12 @@ import pytz
 from pytz import timezone
 from pathlib import Path
 
+####################################################################################
+####################################################################################
+################ E4 Scrpits
+####################################################################################
+####################################################################################
+
 def prepE4Data(in_file,cols,Hz):#,to_datetime,read_csv,date_range,pytz):
     if 'IBI' in cols:
         with open(in_file,'r') as InFile:
@@ -33,11 +39,11 @@ def prepE4Data(in_file,cols,Hz):#,to_datetime,read_csv,date_range,pytz):
     return E4_dump
 
 
-def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_IBI, load_BVP, download_path,shift_tracking_file):
+def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_IBI, load_BVP, download_path,tracking_file_loc,tracking_file):
     # This takes all data downloaded from Empatica site, and adds it to the project sql db
     # connect to db..
-    engine = create_engine(str('sqlite:///')+db_loc+db_name)
-    metadata = MetaData(bind=engine)
+    engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
+    metadata = sa.MetaData(bind=engine)
     metadata.reflect()
     connection = engine.connect()
     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
@@ -63,12 +69,12 @@ def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_I
     }
 
     colTypes = {
-        'EDA': {'TimeStamp':DateTime(),'MicroS':Float()},
-        'HR': {'TimeStamp':DateTime(),'AvgHR':Float()},
-        'ACC': {'TimeStamp':DateTime(),'x':Integer(),'y':Integer(),'z':Integer()},
-        'Temp': {'TimeStamp':DateTime(),'DegreesC':Float()},
-        'IBI':{'TimeStamp':DateTime(),'IBI':Float()},
-        'BVP':{'TimeStamp':DateTime(),'BVP':Float()}
+        'EDA': {'TimeStamp':sa.DateTime(),'MicroS':sa.Float()},
+        'HR': {'TimeStamp':sa.DateTime(),'AvgHR':sa.Float()},
+        'ACC': {'TimeStamp':sa.DateTime(),'x':sa.Integer(),'y':sa.Integer(),'z':sa.Integer()},
+        'Temp': {'TimeStamp':sa.DateTime(),'DegreesC':sa.Float()},
+        'IBI':{'TimeStamp':sa.DateTime(),'IBI':sa.Float()},
+        'BVP':{'TimeStamp':sa.DateTime(),'BVP':sa.Float()}
     }
 
     cols = {
@@ -82,17 +88,17 @@ def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_I
 
     ### Import tracking sheet with three colums: Shift name, collected (0/1... meaning is it ready to upload or not),
     ### and uploaded (0/1... meaning has it been uploaded into the db yet)
-    shift_tracking = pd.read_csv(shift_tracking_file)
+    shift_tracking = pd.read_excel(os.path.join(tracking_file_loc,tracking_file))
     #print(len(shift_tracking))
-    shifts = shift_tracking[shift_tracking.Collected == 1] # Keep only shifts with collected data ready for upload
-    shifts = shift_tracking[shift_tracking.Uploaded == 0] # Keep only those which haven't been uploaded
+    #shifts = shift_tracking[shift_tracking.Collected == 1] # Keep only shifts with collected data ready for upload
+    shifts = shift_tracking[shift_tracking.e4_in_db != 1] # Keep only those which haven't been uploaded
     #print(len(shift_tracking))
     #shift_tracking.head(10)
 
     # loads data into db
     #for shift in [ folder for folder in os.listdir(download_path) if os.path.isdir(os.path.join(download_path, folder)) ]:#os.listdir(download_path):
     #    if not shift.startswith(".") and shift not in shifts_imported['shift'].unique():
-    shifts = shifts.Shift.unique()
+    shifts = shifts.shift_day.unique()
     for shift in shifts:
         shift_path = os.path.join(download_path,shift,'E4_data')
         if not os.path.isdir(shift_path):
@@ -101,7 +107,7 @@ def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_I
 
             print(shift)
             print(pd.to_datetime('now'))
-            shift_tracking.loc[shift_tracking.index[shift_tracking['Shift'] == shift].tolist()[0],'Uploaded'] = 1
+            shift_tracking.loc[shift_tracking.index[shift_tracking['shift_day'] == shift].tolist()[0],'e4_in_db'] = 1
 
             for device_data_pull in os.listdir(shift_path):
                 if not device_data_pull.startswith(".") and ('_' in device_data_pull):
@@ -114,7 +120,84 @@ def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_I
                             infile = os.path.join(device_data_pull_path,str(measure+'.csv'))
                             if os.path.exists(infile):
                                 Table_name = str('Table_'+device+'_'+measure)
-                                data = prepE4Data(infile,cols[measure],measHz[measure],pd.to_datetime,pd.read_csv,pd.date_range,pytz)
+                                data = prepE4Data(infile,cols[measure],measHz[measure])
                                 data.to_sql(Table_name,con=connection,if_exists='append',dtype=colTypes[measure],chunksize=1000,index=False)
                             else: print('No file to import!!!')
-            shift_tracking.to_csv('PICU_Shift_Upload_Tracking.csv',index=False)
+    shift_tracking.to_excel('PICU_Shift_Upload_Tracking_updated.xlsx',index=False)
+
+
+def get_e4_SH(db_name, db_loc,tracking_file_loc,tracking_file):
+
+    # connect to db..
+    engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
+    metadata = sa.MetaData(bind=engine)
+    metadata.reflect()
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+
+    # reads in tracking sheet, and finds shifts with uploaded data, but not a SH file generated
+    shift_tracking = pd.read_excel(os.path.join(tracking_file_loc,tracking_file))
+
+    shift_tracking = shift_tracking[shift_tracking.e4_in_db == 1] # Keep only those which have been uploaded
+    shift_tracking = shift_tracking[shift_tracking.e4_exported != 1] # Keep only those which have been uploaded
+
+    # Reads in device assignment per shift
+    E4_ids = pd.read_excel(os.path.join(download_path,'PICU_Device_Assignment.xlsx'),index=None)
+
+
+####################################################################################
+####################################################################################
+################ RTLS Scrpits
+####################################################################################
+####################################################################################
+
+
+def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file):
+    # connect to db..
+    engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
+    metadata = sa.MetaData(bind=engine)
+    metadata.reflect()
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+
+    '''
+    Read in tracking sheet to get list of shifts ready to pull data'''
+    shift_tracking = pd.read_excel(os.path.join(tracking_file_loc,tracking_file))
+    shift_tracking = shift_tracking[shift_tracking.rtls_in_db == 1] # keep only shifts with rtls data loaded into the db
+    shift_tracking = shift_tracking[shift_tracking.rtls_final_export == 0] # keep only shifts wihout final data pulled
+
+    keeps = ['shift_day','date','rtls_id','am_or_pm']
+    badges = shift_tracking[keeps].copy()
+    badges['date'] = pd.to_datetime(badges['date'])
+    badges.date = badges.date.dt.normalize()
+
+    badges['start'] = np.where(
+        badges.am_or_pm == 'am',
+        badges.date + pd.Timedelta(7, unit = 'hours'),
+        badges.date + pd.Timedelta(19, unit = 'hours'))
+    badges['end'] = badges.start + pd.Timedelta(12, unit = 'hours')
+    badges['shift_num'] = badges.shift_day.str.rsplit('_',expand=True)[1]
+    badges[badges.am_or_pm == 'pm'].head()
+
+    for shift in badges.shift_day.unique():
+        print(len(badges[badges.shift_day == shift]))
+        df_list = []
+        for i, badge in badges[badges.shift_day == shift].iterrows():
+            Table_name = 'Table_'+str(badge.rtls_id)
+            if engine.dialect.has_table(engine, Table_name):
+                RTLS_data = metadata.tables[Table_name]
+                s = select([RTLS_data]).where(and_(RTLS_data.c.Time_In >= badge.start,RTLS_data.c.Time_In <= badge.end))
+                rp = connection.execute(s)
+                badge_df = pd.DataFrame(rp.fetchall())
+                if not badge_df.empty:
+                    badge_df.columns = rp.keys()
+                    badge_df['RTLS_ID'] =  badge.rtls_id
+                    df_list.append(badge_df)
+                else: print('Missing DATA for badge... '+str(badge))
+            else: print('Missing TABLE for badge... '+str(badge))
+        if len(df_list) > 0:
+            df = pd.concat(df_list)
+            df = locRecode_izer(df)
+            df.to_csv(str(shift)+'_RTLS.csv',index=False)
+        else: print('No data!!!')
+        print(len(df))
