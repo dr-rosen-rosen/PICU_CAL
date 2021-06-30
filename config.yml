@@ -7,3 +7,6 @@ default:
     E4_download_path: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
     tracking_file_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
     tracking_file: 'PICU_Device_Assignment.xlsx'
+
+custom_process:
+    tracking_file: ''
