@@ -85,37 +85,28 @@ def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_I
         'IBI':['IBI'],
         'BVP':['BVP']
     }
-
     ### Import tracking sheet with three colums: Shift name, collected (0/1... meaning is it ready to upload or not),
     ### and uploaded (0/1... meaning has it been uploaded into the db yet)
     shift_tracking = pd.read_excel(os.path.join(tracking_file_loc,tracking_file))
-    #print(len(shift_tracking))
-    #shifts = shift_tracking[shift_tracking.Collected == 1] # Keep only shifts with collected data ready for upload
     shifts = shift_tracking[shift_tracking.e4_in_db != 1] # Keep only those which haven't been uploaded
-    #print(len(shift_tracking))
-    #shift_tracking.head(10)
-
-    # loads data into db
-    #for shift in [ folder for folder in os.listdir(download_path) if os.path.isdir(os.path.join(download_path, folder)) ]:#os.listdir(download_path):
-    #    if not shift.startswith(".") and shift not in shifts_imported['shift'].unique():
     shifts = shifts.shift_day.unique()
+    print(shifts)
+    # loads data into db
     for shift in shifts:
         shift_path = os.path.join(download_path,shift,'E4_data')
         if not os.path.isdir(shift_path):
             print('Problem!... no folder for '+shift)
         else:
-
             print(shift)
             print(pd.to_datetime('now'))
             #shift_tracking.loc[shift_tracking.index[shift_tracking['shift_day'] == shift].tolist()[0],'e4_in_db'] = 1
-
             for device_data_pull in os.listdir(shift_path):
                 if not device_data_pull.startswith(".") and ('_' in device_data_pull):
                     device_data_pull_path = os.path.join(shift_path,device_data_pull)
                     device = device_data_pull.split('_')[1]
                     print(device)
                     try: shift_tracking.loc[((shift_tracking.shift_day == shift) & (shift_tracking.e4_ID == device)),'e4_in_db'] = 1
-                    except: print('Problem tracking '+str(device)+' for '+str(shift_day))
+                    except: print('Problem tracking '+str(device)+' for '+str(shift))
                     for measure, value in load_measures.items():
                         if value == True:
                             print(measure)
@@ -125,8 +116,6 @@ def raw_E4_to_db(db_name, db_loc, load_EDA, load_HR, load_ACC, load_Temp, load_I
                                 data = prepE4Data(infile,cols[measure],measHz[measure])
                                 data.to_sql(Table_name,con=connection,if_exists='append',dtype=colTypes[measure],chunksize=1000,index=False)
                             else: print('No file to import!!!')
-    shift_tracking.to_excel('PICU_Shift_Upload_Tracking_updated.xlsx',index=False)
-
 
 def get_e4_SH(db_name, db_loc,tracking_file_loc,tracking_file,download_path,load_EDA, load_HR, load_ACC, load_Temp, load_IBI, load_BVP):
 

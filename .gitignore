@@ -8,6 +8,14 @@
 # Session Data files
 .RData
 
+# Randos
+*.DS_Store
+
+# data files
+*.db
+*.xlsx
+/data/
+
 # User-specific files
 .Ruserdata
 
