@@ -6,6 +6,7 @@ default:
     E4_db_name: 'PICU_E4_data.db'
     RTLS_db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/'
     RTLS_db_name: 'RTLS_030819.db'
+    Survey_f_name: "PICU_RawSurveyData_update_061821.csv"
 
 custom_process:
     tracking_file: 'Custom_Process_PICU_Device_Assignment.xlsx'
@@ -14,8 +15,10 @@ mike:
     inherits: custom_process
     E4_download_path: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
     tracking_file_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
+    survey_f_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/Data_Analysis/'
 
 salar:
     inherits: custom_process
-    E4_download_path: # Add path for you
-    tracking_file_loc: # Add path for you
+    E4_download_path: '/Users/skhaleg1/OneDrive - Johns Hopkins University/Project_CollectiveAllostaticLoad/PICU Data Collection/'
+    tracking_file_loc: '/Users/skhaleg1/OneDrive - Johns Hopkins University/Project_CollectiveAllostaticLoad/PICU Data Collection/'
+    survey_f_loc: '/Users/skhaleg1/OneDrive - Johns Hopkins University/Project_CollectiveAllostaticLoad/Data_Analysis/'
