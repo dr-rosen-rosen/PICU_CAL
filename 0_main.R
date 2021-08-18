@@ -4,10 +4,11 @@ library(config)
 library(tidyverse)
 library(reticulate)
 library(here)
+library(readxl)
 
 debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
-Sys.setenv(R_CONFIG_ACTIVE = "salar") # 'default')#
+Sys.setenv(R_CONFIG_ACTIVE = "mike") # 'default')#
 config <- config::get()
 Sys.setenv(RETICULATE_PYTHON = config$py_version)
 reticulate::source_python('1_funcs.py')
@@ -16,7 +17,7 @@ source(here('1_funcs.R'), echo = TRUE)
 
 
 #################################################################
-############ E4 Processing Scripts
+############ Scripts for processing data for SH
 #################################################################
 
 # Load data into database, and update tracking forms
@@ -56,3 +57,15 @@ get_RTLS(
   tracking_file = config$tracking_file
 )
 
+survey_data <- get_survey_data(
+  f_loc = paste0(config$survey_f_loc,config$Survey_f_name),
+  write_file = FALSE
+)
+
+#################################################################
+############ TEST for synchronies
+#################################################################
+reticulate::source_python('1_funcs.py')
+get_synchronies(
+  tracking_df = readxl::read_excel(paste0(config$tracking_file_loc,config$tracking_file))
+)

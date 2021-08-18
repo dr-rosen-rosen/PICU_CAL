@@ -2,7 +2,7 @@
 Code for the Collective Allostatic Load Project. 
 
 This includes data processing for the following:
-1. Survey (currently in Salar's repo; we'll merge at some point)
+1. Survey
 2. E4
 3. RTLS
 4. Sociometric (and openbadge)
