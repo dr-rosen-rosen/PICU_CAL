@@ -8,7 +8,7 @@ library(readxl)
 
 debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
-Sys.setenv(R_CONFIG_ACTIVE = "salar") # 'default')#
+Sys.setenv(R_CONFIG_ACTIVE = "mike") # 'default')#
 config <- config::get()
 Sys.setenv(RETICULATE_PYTHON = config$py_version)
 reticulate::source_python('1_funcs.py')
@@ -55,6 +55,11 @@ get_RTLS(
   db_name = config$RTLS_db_name,
   tracking_file_loc = config$tracking_file_loc,
   tracking_file = config$tracking_file
+)
+
+survey_data <- get_survey_data(
+  f_loc = paste0(config$survey_f_loc,config$Survey_f_name),
+  write_file = FALSE
 )
 
 #################################################################
