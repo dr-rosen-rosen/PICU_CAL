@@ -262,7 +262,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file):
         badges.date + pd.Timedelta(7, unit = 'hours'),
         badges.date + pd.Timedelta(19, unit = 'hours'))
     badges['end'] = badges.start + pd.Timedelta(12, unit = 'hours')
-    badges['shift_num'] = badges.shift_day.str.rsplit('_',expand=True)[1]
+    badges['shift_num'] = badges.shift_day.str.rsplit('_',expand=True)[1] # I think this should be dropped; not used anywhere
     #badges[badges.am_or_pm == 'pm'].head()
 
     for shift in badges.shift_day.unique():
@@ -284,7 +284,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file):
         if len(df_list) > 0:
             df = pd.concat(df_list)
             df = loc_code_badge_data(badge_data = df,db_name = db_name,db_loc = db_loc)
-            df.to_csv(str(shift)+'_RTLS.csv',index=False) #update this to save in appropriate directory
+            df.to_csv(os.path.join(tracking_file_loc,shift,'RTLS_data',str(shift)+'_RTLS.csv'),index=False) #update this to save in appropriate directory
         else: print('No data!!!')
         print(len(df))
 
@@ -295,49 +295,49 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file):
 ####################################################################################
 ####################################################################################
 
-def get_synchronies(tracking_df):
-    '''1. Set up data structures and control variables'''
-
-    # define roles for the mission / shift
-    '''CURRENTLY ASSUMING THERE IS ONLY ONE SHIFT'''
-    tracking_df.study_member_id = tracking_df.study_member_id.astype('int').astype('str') # making sure they are str type and not floats
-    roles = tracking_df.study_member_id.unique() # pulls all participaint id's for shift
-
-    '''ALL OF THESE SHOULD BE SET ELSEWHERE... CONFIG FILE?'''
-    measures = ['EDA','HR'] # ,'ACC'for IBI the loop below needs modification... likely upsample to a minute
-    # set lag length
-    offset = 50 # in seconds
-    # set frequency for resampling and to pass to AR
-    sampling_freq = 'S' # need to turn this into a dict to match resampling to specific measures
-    corr_method = 'pearson'
-    use_residuals = True # does cross-corrleation on residuals of autocorrelation...
-    # set missing vals
-    # missing_E4_flag = 'M'
-    # NA_E4_flag = 'NA'
-
-    '''MOVE TO ONEDRIVE... use single DB. Onedrive limit is now 100GB; we should be ok'''
-    #db_path = os.path.join(os.getcwd(),'HERA_DBs')
-
-    # Set up dataframe to store results; creates one dataframe for all loops
-    if len(tracking_df.shift_day.unique()) == 1:
-        cols = ['Shift', 'Participant_ID', 'Time_period']
-        for measure in measures:
-            cols.append('Se_'+measure)
-            for role in roles:
-                cols.append(role+'_Driver_'+measure)
-                cols.append(role+'_Empath_'+measure)
-                cols.append(role+'_AR_'+measure)
-        Sync_df = pd.DataFrame(columns=cols,data=None,index=range(0,3))
-    else: print('Uh oh... tracking df has more than one shift in it.')
-    Role_E4_dict = tracking_df.set_index('study_member_id').to_dict()['e4_id']
-    print(Role_E4_dict)
-    '''2. Iterate through each task in the task dataframe, create Table 1 measures from Guastello and Peressini:'''
-    for measure in measures:
-        Se = 'Se_'+measure
-        if am_shift:
-            start =
-            
-    return Sync_df
+# def get_synchronies(tracking_df):
+#     '''1. Set up data structures and control variables'''
+#
+#     # define roles for the mission / shift
+#     '''CURRENTLY ASSUMING THERE IS ONLY ONE SHIFT'''
+    # tracking_df.study_member_id = tracking_df.study_member_id.astype('int').astype('str') # making sure they are str type and not floats
+    # roles = tracking_df.study_member_id.unique() # pulls all participaint id's for shift
+    #
+    # '''ALL OF THESE SHOULD BE SET ELSEWHERE... CONFIG FILE?'''
+    # measures = ['EDA','HR'] # ,'ACC'for IBI the loop below needs modification... likely upsample to a minute
+    # # set lag length
+    # offset = 50 # in seconds
+    # # set frequency for resampling and to pass to AR
+    # sampling_freq = 'S' # need to turn this into a dict to match resampling to specific measures
+    # corr_method = 'pearson'
+    # use_residuals = True # does cross-corrleation on residuals of autocorrelation...
+    # # set missing vals
+    # # missing_E4_flag = 'M'
+    # # NA_E4_flag = 'NA'
+    #
+    # '''MOVE TO ONEDRIVE... use single DB. Onedrive limit is now 100GB; we should be ok'''
+    # #db_path = os.path.join(os.getcwd(),'HERA_DBs')
+    #
+    # # Set up dataframe to store results; creates one dataframe for all loops
+    # if len(tracking_df.shift_day.unique()) == 1:
+    #     cols = ['Shift', 'Participant_ID', 'Time_period']
+    #     for measure in measures:
+    #         cols.append('Se_'+measure)
+    #         for role in roles:
+    #             cols.append(role+'_Driver_'+measure)
+    #             cols.append(role+'_Empath_'+measure)
+    #             cols.append(role+'_AR_'+measure)
+    #     Sync_df = pd.DataFrame(columns=cols,data=None,index=range(0,3))
+    # else: print('Uh oh... tracking df has more than one shift in it.')
+    # Role_E4_dict = tracking_df.set_index('study_member_id').to_dict()['e4_id']
+    # print(Role_E4_dict)
+    # '''2. Iterate through each task in the task dataframe, create Table 1 measures from Guastello and Peressini:'''
+    # for measure in measures:
+    #     Se = 'Se_'+measure
+    #     if am_shift:
+    #         start =
+    #
+    # return Sync_df
 
 # for measure in measures:
 #     '''2. Iterate through each task in the task dataframe, create Table 1 measures from Guastello and Peressini:'''

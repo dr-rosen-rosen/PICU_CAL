@@ -12,13 +12,13 @@ custom_process:
     tracking_file: 'Custom_Process_PICU_Device_Assignment.xlsx'
 
 mike:
-    inherits: custom_process
+    inherits: default
     E4_download_path: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
     tracking_file_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
     survey_f_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/Data_Analysis/'
 
 salar:
-    inherits: custom_process
+    inherits: default
     E4_download_path: '/Users/skhaleg1/OneDrive - Johns Hopkins/Project_CollectiveAllostaticLoad/PICU Data Collection/'
     tracking_file_loc: '/Users/skhaleg1/OneDrive - Johns Hopkins/Project_CollectiveAllostaticLoad/PICU Data Collection/'
     survey_f_loc: '/Users/skhaleg1/OneDrive - Johns Hopkins/Project_CollectiveAllostaticLoad/Data_Analysis/'
