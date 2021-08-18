@@ -4,6 +4,7 @@ library(config)
 library(tidyverse)
 library(reticulate)
 library(here)
+library(readxl)
 
 debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
@@ -16,7 +17,7 @@ source(here('1_funcs.R'), echo = TRUE)
 
 
 #################################################################
-############ E4 Processing Scripts
+############ Scripts for processing data for SH
 #################################################################
 
 # Load data into database, and update tracking forms
@@ -56,3 +57,10 @@ get_RTLS(
   tracking_file = config$tracking_file
 )
 
+#################################################################
+############ TEST for synchronies
+#################################################################
+reticulate::source_python('1_funcs.py')
+get_synchronies(
+  tracking_df = readxl::read_excel(paste0(config$tracking_file_loc,config$tracking_file))
+)
