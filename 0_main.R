@@ -8,7 +8,7 @@ library(readxl)
 
 debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
-Sys.setenv(R_CONFIG_ACTIVE = "mike") # 'default')#
+Sys.setenv(R_CONFIG_ACTIVE = "salar") # 'default')#
 config <- config::get()
 Sys.setenv(RETICULATE_PYTHON = config$py_version)
 reticulate::source_python('1_funcs.py')
