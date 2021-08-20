@@ -8,7 +8,8 @@
 
 library(readr)
 library(tidyverse)
-
+library(networkD3)
+library(r2d3)
 ###############################################################################################
 #####################   Functions for Survey data
 ###############################################################################################
@@ -102,30 +103,7 @@ get_survey_data <- function(f_loc, write_file) {
   picu_data <- picu_data %>%
     rowwise() %>%
     mutate(across(mayo_9:mayo_16, ~recode(.,"N/A" = "1")))
-  # picu_data <-picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_9 = recode(mayo_9, "N/A" = "1")) 
-  # picu_data <- picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_10 = recode(mayo_10, "N/A" = "1")) 
-  # picu_data <- picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_11 = recode(mayo_11, "N/A" = "1")) 
-  # picu_data <- picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_12 = recode(mayo_12, "N/A" = "1")) 
-  # picu_data <- picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_13 = recode(mayo_13, "N/A" = "1")) 
-  # picu_data <- picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_14 = recode(mayo_14, "N/A" = "1")) 
-  # picu_data <- picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_15 = recode(mayo_15, "N/A" = "1")) 
-  # picu_data <- picu_data %>%
-  #   rowwise() %>%
-  #   mutate(mayo_16 = recode(mayo_16, "N/A" = "1")) 
+
   #turning character values that need to be numeric into numeric for Mayo survey
   cols.num_mayo <- c("mayo_1","mayo_2","mayo_3","mayo_4","mayo_5","mayo_6",
                      "mayo_7","mayo_8", "mayo_9","mayo_10","mayo_11","mayo_12",
@@ -144,3 +122,59 @@ get_survey_data <- function(f_loc, write_file) {
   return(picu_data)
 }
 
+###############################################################################################
+#####################   Functions for network metrics and visualization
+###############################################################################################
+
+prep_net_data <- function(df) {
+  
+  # This funciton takes an RTLS df and creates files for:
+  #   Edges
+  #   Nodes
+  nodes <- df %>% 
+    group_by(Receiver) %>%
+    summarize(duration = sum(Duration)) %>%
+    ungroup() %>%
+    mutate(id = row_number() - 1) %>%
+    left_join(
+      distinct(df,Receiver,Receiver_recode, Receiver_name),
+      by = "Receiver"
+    ) %>%
+    rename(rec_num = Receiver,
+           type = Receiver_recode,
+           description = Receiver_name) %>%
+    arrange(desc(duration))
+  
+  #adding back
+  distinct(df,Receiver,Receiver_recode)
+  
+  df <- relabel_nodes(df,nodes) # this just recodes the reciever id to the 'id' var from above; why is that so hard in R?
+  
+  edges <- df %>%
+    arrange(Time_In) %>% # makes sure rows are ordered in ascending time order
+    mutate(to = lead(Receiver)) %>% # creates new colum for destination link based on shifted Receiver column
+    na.omit() %>% # drops last row of NA created by shifting
+    rename(from = Receiver)  %>% # renames Receiver column to the 'from' end of edge
+    group_by(from, to) %>%
+    summarize(weight = n()) %>%
+    ungroup()
+  
+  return(list('nodes' = nodes, 'edges' = edges))
+}
+
+make_rtls_net_fig <- function(df, f_name) {
+  net_data <- prep_net_data(df)
+  forceNetwork(Links = net_data$edges,
+               Nodes = net_data$nodes,
+               Source = "from",
+               Target = "to",
+               NodeID = "description",
+               Group = "type",
+               Value = "weight",
+               Nodesize = "duration",
+               opacity = 1,
+               fontSize = 16,
+               zoom = TRUE,
+               legend = TRUE) %>%
+    saveNetwork(file = f_name, selfcontained = TRUE)
+}

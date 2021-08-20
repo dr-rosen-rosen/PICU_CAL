@@ -50,11 +50,12 @@ get_e4_SH(
   load_BVP = TRUE
 )
 
-get_RTLS(
+rtls_df <- get_RTLS(
   db_loc = config$RTLS_db_loc,
   db_name = config$RTLS_db_name,
   tracking_file_loc = config$tracking_file_loc,
-  tracking_file = config$tracking_file
+  tracking_file = config$analysis_file, # tracking_file for SH handoff
+  save_shifts = FALSE # if TRUE, will save csv's for each shift (for handoff to SH)
 )
 
 survey_data <- get_survey_data(
@@ -62,6 +63,23 @@ survey_data <- get_survey_data(
   write_file = FALSE
 )
 
+#################################################################
+############ Build Networks from RTLS data
+#################################################################
+
+net_data <- prep_net_data(
+  df = rtls_df[which(rtls_df$RTLS_ID == 404455),]
+)
+
+rtls_df %>%
+  group_by(Shift,RTLS_ID) %>%
+  group_walk(
+    ~make_rtls_net_fig(
+      df = .x,
+      f_name = file.path(here(),paste0('output/rtls_net_figs/',.y$Shift,'_',.y$RTLS_ID,'.html')))
+    )
+
+#write_csv(net_data$nodes,path = '522400.csv')
 #################################################################
 ############ TEST for synchronies
 #################################################################
