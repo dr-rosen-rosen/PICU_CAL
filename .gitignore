@@ -15,6 +15,7 @@
 *.db
 *.xlsx
 /data/
+/output/
 
 # User-specific files
 .Ruserdata

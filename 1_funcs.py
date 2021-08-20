@@ -238,7 +238,7 @@ def loc_code_badge_data(badge_data, db_name, db_loc):
             )
         return df_loc_coded
 
-def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file):
+def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file, save_shifts):
     # connect to db..
     engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
     metadata = sa.MetaData(bind=engine)
@@ -264,7 +264,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file):
     badges['end'] = badges.start + pd.Timedelta(12, unit = 'hours')
     badges['shift_num'] = badges.shift_day.str.rsplit('_',expand=True)[1] # I think this should be dropped; not used anywhere
     #badges[badges.am_or_pm == 'pm'].head()
-
+    shift_list = []
     for shift in badges.shift_day.unique():
         print(len(badges[badges.shift_day == shift]))
         df_list = []
@@ -284,10 +284,22 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file):
         if len(df_list) > 0:
             df = pd.concat(df_list)
             df = loc_code_badge_data(badge_data = df,db_name = db_name,db_loc = db_loc)
-            df.to_csv(os.path.join(tracking_file_loc,shift,'RTLS_data',str(shift)+'_RTLS.csv'),index=False) #update this to save in appropriate directory
+            if save_shifts:
+                df.to_csv(os.path.join(tracking_file_loc,shift,'RTLS_data',str(shift)+'_RTLS.csv'),index=False) #update this to save in appropriate directory
+            df['Shift'] = shift
+            shift_list.append(df)
         else: print('No data!!!')
         print(len(df))
+    return(pd.concat(shift_list))
+    
+####################################################################################################
+############################## Helper functions for network data manipulation
+####################################################################################################
 
+def relabel_nodes(df, nodes):
+    node_dict = dict(zip(nodes.rec_num,nodes.id))
+    df['Receiver'] = df['Receiver'].map(node_dict)
+    return(df)
 
 ####################################################################################
 ####################################################################################

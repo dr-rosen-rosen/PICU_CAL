@@ -7,9 +7,7 @@ default:
     RTLS_db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/'
     RTLS_db_name: 'RTLS_030819.db'
     Survey_f_name: "PICU_RawSurveyData_update_061821.csv"
-
-custom_process:
-    tracking_file: 'Custom_Process_PICU_Device_Assignment.xlsx'
+    analysis_file: 'Custom_Process_PICU_Device_Assignment.xlsx'
 
 mike:
     inherits: default
