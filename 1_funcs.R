@@ -10,6 +10,8 @@ library(readr)
 library(tidyverse)
 library(networkD3)
 library(r2d3)
+library(DBI)
+library(RSQLite)
 ###############################################################################################
 #####################   Functions for Survey data
 ###############################################################################################
@@ -177,4 +179,153 @@ make_rtls_net_fig <- function(df, f_name) {
                zoom = TRUE,
                legend = TRUE) %>%
     saveNetwork(file = f_name, selfcontained = TRUE)
+}
+
+
+###############################################################################################
+#####################   Helper functions for Repacking data from synchrony scripts
+###############################################################################################
+
+clean_up_synch_results <- function(single_e4_df, df_name) {
+  ### This takes one top level lest from teh list of lists returned by python function
+  ### It separates out the individual and team components of the list
+  return(reticulate::py_to_r(single_e4_df[[df_name]]))
+}
+
+clean_up_py <- function(pd_df) {
+  return(reticulate::py_to_r(pd_df))
+}
+
+rename_func <- function(n) {
+  if (n == 'TimeStamp') {
+    return('TimeStamp')
+  } else {
+    return(paste0('id_',n))
+  }
+}
+
+
+###############################################################################################
+#####################   OLD Functions for E4 syncrhony done in R
+#####################     Ran in to MANY issues in R w/ sqlite
+#####################     attempted to address that with small py functions
+#####################     more issues with timestamps, and dataframes passing back and forth
+#####################     for time reasons; abandoning this for now.
+#####################     This will be helpful when we have time (and are not using sqlite anymore)
+###############################################################################################
+create_ACC_energy_metric_r <- function(one_e4) {
+  dimensions = c('x', 'y', 'z')
+  print('here')
+  for (dimension in dimensions) {
+    one_e4[[dimension]] <- one_e4[[dimension]]^2
+  }
+  one_e4$energy <- rowSums(one_e4[,dimensions])
+  one_e4$energy <- '^' (one_e4$energy, 1/2)
+  one_e4 <- one_e4[ , !(names(one_e4) %in% dimensions)]
+  print(colnames(one_e4))
+  return(one_e4)
+}
+
+
+pull_e4_data <- function(e4_ids, shift_start, measure,e4_to_part_id) {
+  print(e4_to_part_id)
+  shift_stop <- shift_start + lubridate::hours(12)
+  print(shift_start)
+  print(shift_stop)
+  df_list = list()
+  all_e4_data <- TRUE
+  for (e4 in e4_ids) {
+    ### pulls data for given badge within shift range
+
+    t_name <- paste0('Table_',e4,'_',measure)
+    ### built this as temporary work around to issues directly filtering timestamp data in sqlite from R
+    one_e4 <- pull_e4_data_py(
+      # db is hard coded in script for now, since this is temporary fix.
+      t_name = t_name,
+      shift_start = shift_start,
+      shift_stop = shift_stop
+    )
+    ### This SHOULD be easy to do in R, but dbplyr does not play well with sqlite for timestamps
+    ### Using python script w/sqlalchemy as temporary fix until we migrat to better db solution
+    # one_e4 <- tbl(e4_con, t_name) %>%
+    #   #filter(TimeStamp >= shift_start & TimeStamp <= shift_stop) %>%
+    #   collect()
+    # one_e4 <- one_e4 %>%
+    #   filter(TimeStamp >= shift_start & TimeStamp <= shift_stop)
+
+    ### does minimal data QC... this needs exapnding
+    if (nrow(one_e4) > 0) { # checks if anything is in the data, and adds to list if there is
+      print('... has data!')
+      print(nrow(one_e4))
+      ### Need to add metric conversion for ACC (go from 3 cols to 'energy metric')
+      # sets col name to part_id; This is done to track who is who once they are integrated
+      # need to expand this to other measures with named list of measure / metrics
+      if (measure == 'HR'){
+        colnames(one_e4)[which(names(one_e4) == "AvgHR")] <- e4_to_part_id[[e4]]
+      } else if (measure == 'EDA') {
+        colnames(one_e4)[which(names(one_e4) == "MicroS")] <- e4_to_part_id[[e4]]
+      } else if (measure == 'ACC') {
+        one_e4 <- create_ACC_energy_metric_r(one_e4)
+        colnames(one_e4)[which(names(one_e4) == "energy")] <- e4_to_part_id[[e4]]
+        }
+      df_list[[e4]] <- one_e4
+    } else {
+      print('... has NO data!')
+      all_e4_data <- FALSE
+    }
+  }
+  if (all_e4_data == TRUE) {
+    all_data <- df_list %>% purrr::reduce(full_join, by = "TimeStamp")
+    all_data$TimeStamp <- lubridate::as_datetime(all_data$TimeStamp)
+    all_data$TimeStamp <- lubridate::force_tz(all_data$TimeStamp, "America/New_York") # timestamps were coming back with Batlimore Times, but marked as UTC timezone; this fixes
+    print(paste('All data this big... ',ncol(all_data),' by ',nrow(all_data)))
+    return(all_data)
+  } else {
+    return('WHOOOPS')
+  }
+}
+
+make_sync_matrix <- function(e4_data){
+  ### define datastructures for making and storing coef_matrix
+  print(typeof(e4_data))
+  working_roles <- colnames(e4_data)
+  print(working_roles)
+  print(typeof(working_roles))
+  working_roles <- working_roles %>% purrr::list_modify("TimeStamp" = NULL)
+  print(working_roles)
+  Sync_Coefs <- data.frame(matrix(ncol=length(working_roles),nrow=length(working_roles), dimnames=list(working_roles, working_roles)))
+  ### format and clean timeseries
+  time_lag <- 50
+  ### Creates Table 1 in Guastello and Perisini
+  for (from_role in working_roles){
+    print(from_role)
+    role_acf <- e4_data %>% select(from_role) %>% drop_na() %>% acf(plot = FALSE)
+    Sync_Coefs[[from_role,from_role]] <- role_acf$acf[time_lag]
+  }
+  return(Sync_Coefs)
+}
+
+get_synchronies <- function(shift_df, shift, measure) {
+  e4_ids <- unique(shift_df$e4_id)
+  shift_date <- unique(shift_df$date)[1] # should add a check to make sure they are all the same
+  lubridate::tz(shift_date) <- "America/New_york" # changing to EDT; E4 data is in ETC... need to check that daylight savings is handled correctly
+  am_or_pm <- unique(shift_df$am_or_pm)[1] # should add a check to make sure they are all the same
+  if (am_or_pm == 'am') {
+    lubridate::hour(shift_date) <- 7
+  } else if (am_or_pm == 'pm') {
+    lubridate::hour(shift_date) <- 19
+  }
+  #measure <- "HR" # need to pass this in as an argument
+  e4_data <- pull_e4_data(
+    e4_ids = e4_ids,
+    shift_start = shift_date,
+    measure = measure,
+    e4_to_part_id = split(shift_df$study_member_id, shift_df$e4_id)
+    )
+  print(nrow(e4_data))
+
+  # make_sync_matrix()
+  # make_sync_metrics()
+  # how to return results in tibble?
+  return(e4_data)
 }
