@@ -12,6 +12,8 @@ from pathlib import Path
 import numpy as np
 from multiprocessing import Pool, cpu_count
 from contextlib import closing
+from statsmodels.tsa.ar_model import AR, AutoReg
+from statsmodels.tsa.stattools import acf
 
 ####################################################################################
 ####################################################################################
@@ -250,7 +252,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file, save_shifts):
     Read in tracking sheet to get list of shifts ready to pull data'''
     shift_tracking = pd.read_excel(os.path.join(tracking_file_loc,tracking_file))
     shift_tracking = shift_tracking[shift_tracking.rtls_in_db == 1] # keep only shifts with rtls data loaded into the db
-    shift_tracking = shift_tracking[shift_tracking.rtls_final_export == 0] # keep only shifts wihout final data pulled
+    shift_tracking = shift_tracking[shift_tracking.rtls_final_export != 1] # keep only shifts wihout final data pulled
 
     keeps = ['shift_day','date','rtls_id','am_or_pm']
     badges = shift_tracking[keeps].copy()
@@ -262,7 +264,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file, save_shifts):
         badges.date + pd.Timedelta(7, unit = 'hours'),
         badges.date + pd.Timedelta(19, unit = 'hours'))
     badges['end'] = badges.start + pd.Timedelta(12, unit = 'hours')
-    badges['shift_num'] = badges.shift_day.str.rsplit('_',expand=True)[1] # I think this should be dropped; not used anywhere
+    #badges['shift_num'] = badges.shift_day.str.rsplit('_',expand=True)[1] # I think this should be dropped; not used anywhere
     #badges[badges.am_or_pm == 'pm'].head()
     shift_list = []
     for shift in badges.shift_day.unique():
@@ -291,7 +293,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file, save_shifts):
         else: print('No data!!!')
         print(len(df))
     return(pd.concat(shift_list))
-    
+
 ####################################################################################################
 ############################## Helper functions for network data manipulation
 ####################################################################################################
@@ -307,199 +309,222 @@ def relabel_nodes(df, nodes):
 ####################################################################################
 ####################################################################################
 
-# def get_synchronies(tracking_df):
-#     '''1. Set up data structures and control variables'''
-#
-#     # define roles for the mission / shift
-#     '''CURRENTLY ASSUMING THERE IS ONLY ONE SHIFT'''
-    # tracking_df.study_member_id = tracking_df.study_member_id.astype('int').astype('str') # making sure they are str type and not floats
-    # roles = tracking_df.study_member_id.unique() # pulls all participaint id's for shift
-    #
-    # '''ALL OF THESE SHOULD BE SET ELSEWHERE... CONFIG FILE?'''
-    # measures = ['EDA','HR'] # ,'ACC'for IBI the loop below needs modification... likely upsample to a minute
-    # # set lag length
-    # offset = 50 # in seconds
-    # # set frequency for resampling and to pass to AR
-    # sampling_freq = 'S' # need to turn this into a dict to match resampling to specific measures
-    # corr_method = 'pearson'
-    # use_residuals = True # does cross-corrleation on residuals of autocorrelation...
-    # # set missing vals
-    # # missing_E4_flag = 'M'
-    # # NA_E4_flag = 'NA'
-    #
-    # '''MOVE TO ONEDRIVE... use single DB. Onedrive limit is now 100GB; we should be ok'''
-    # #db_path = os.path.join(os.getcwd(),'HERA_DBs')
-    #
-    # # Set up dataframe to store results; creates one dataframe for all loops
-    # if len(tracking_df.shift_day.unique()) == 1:
-    #     cols = ['Shift', 'Participant_ID', 'Time_period']
-    #     for measure in measures:
-    #         cols.append('Se_'+measure)
-    #         for role in roles:
-    #             cols.append(role+'_Driver_'+measure)
-    #             cols.append(role+'_Empath_'+measure)
-    #             cols.append(role+'_AR_'+measure)
-    #     Sync_df = pd.DataFrame(columns=cols,data=None,index=range(0,3))
-    # else: print('Uh oh... tracking df has more than one shift in it.')
-    # Role_E4_dict = tracking_df.set_index('study_member_id').to_dict()['e4_id']
-    # print(Role_E4_dict)
-    # '''2. Iterate through each task in the task dataframe, create Table 1 measures from Guastello and Peressini:'''
-    # for measure in measures:
-    #     Se = 'Se_'+measure
-    #     if am_shift:
-    #         start =
-    #
-    # return Sync_df
+### Creates energy metric for ACC data
+def create_ACC_energy_metric(E4_data):
+    # convert x, y , z to energy metric
+    # consider 10.1371/journal.pone.0160644
+    dimensions = ['x','y','z']
+    for dimension in dimensions:
+        E4_data[dimension] = E4_data[dimension].apply(lambda x: np.square(x))
+    E4_data['energy'] = E4_data[dimensions].sum(axis=1)
+    E4_data['energy'] = E4_data['energy']**(1/2)
+    E4_data.drop(columns=dimensions,inplace=True)
+    return(E4_data)
 
-# for measure in measures:
-#     '''2. Iterate through each task in the task dataframe, create Table 1 measures from Guastello and Peressini:'''
-#     Se = 'Se_'+measure
-#     for i, row in tasks_df.iterrows():
-#         E4_ids =  [x for x in row[roles].values if str(x) != 'nan'] # Drops any roles that have no E4 ID
-#         E4_ids = [x for x in E4_ids if str(x) != NA_E4_flag]
-#         Role_E4_dict = row[roles].to_dict() # Creates dict for relabeling roles and device IDs
-#
-#         # runs for all tasks with a dyad or greater with no missing E4 data
-#         if (len(E4_ids) <= 1):
-#             print('Task List: Too few E4s..')
-#             pass
-#         elif (any(missing_E4_flag in x for x in E4_ids)):
-#             print('Task List: Missing E4 data...')
-#             pass
-#         elif (any(';' in x for x in E4_ids)) or (any('(' in x for x in E4_ids)) or (any(':' in x for x in E4_ids)): #need to expand this to make it measure specific for NEDA or NBVP
-#             print('Task List: Incomplete E4 data...')
-#             pass
-#         else:
-#             E4_tab = pd.DataFrame(data = None)
-#             all_E4s_inData = True
-#             for E4 in E4_ids:
-#                 # this for loop builds dataframe with timestamp as index, device id's as column names, and measure as values
-#                 # Pulls data from DB
-#                 try:
-#                     connection, metadata = db_connection(db_path,row.Team,row.Mission_day)
-#                     t_name = str('Table_'+E4+'_'+measure)
-#                     t = metadata.tables[t_name]
-#                     s = select([t]).where((t.c.TimeStamp >= row['Start Time']) & (t.c.TimeStamp <= row['Stop Time']))
-#                     rp = connection.execute(s)
-#                     E4_data = pd.DataFrame(rp.fetchall())
-#                 except:
-#                     E4_data.drop(E4_data.index, inplace=True) # gets rid of data from previous cycle through loop if pulling data fails
-#                     print('Problem with DB for '+t_name+' in '+str(row.Team)+' on '+str(row.Mission_day))
-#
-#                 if E4_data.empty:
-#                     print('No data in DB...')
-#                     all_E4s_inData = False
-#                 else:
-#                     E4_data.columns = rp.keys()
-#
-#                     # Set TZ for timestamps
-#                     E4_data.TimeStamp = pd.to_datetime(E4_data.TimeStamp)
-#                     E4_data.TimeStamp = E4_data.TimeStamp.dt.tz_localize(pytz.timezone('UTC')) # E4 timestamps are stored in utc
-#                     E4_data.set_index('TimeStamp', inplace = True)
-#
-#                     if measure == 'ACC':
-#                         # convert x, y , z to energy metric
-#                         # consider 10.1371/journal.pone.0160644
-#                         dimensions = ['x','y','z']
-#                         for dimension in dimensions:
-#                             E4_data[dimension] = E4_data[dimension].apply(lambda x: np.square(x))
-#                         E4_data['energy'] = E4_data[dimensions].sum(axis=1)
-#                         E4_data['energy'] = E4_data['energy']**(1/2)
-#                         E4_data.drop(columns=dimensions,inplace=True)
-#                     else: pass
-#
-#                     E4_data = E4_data.resample(sampling_freq).mean()
-#
-#                     # renames data column to device id
-#                     E4_data.columns = [E4]
-#
-#                     if E4_tab.empty:
-#                         E4_tab = E4_data.copy()
-#                     else:
-#                         E4_tab = E4_tab.merge(E4_data, on = 'TimeStamp', how = 'outer')
-#
-#             if all_E4s_inData:
-#                 # rename columns as roles instead of device IDs
-#                 E4_tab.columns.name = None
-#                 Role_to_cols = {v: k for k, v in Role_E4_dict.items()}
-#                 E4_tab.rename(columns=Role_to_cols,inplace=True)
-#
-#
-#                 working_roles = list(E4_tab.columns.values) # for only processing roles present in the data
-#                 Sync_Coefs = pd.DataFrame(index=working_roles,columns=working_roles,data=None)
-#
-#                 #Creates Table 1 in Guastello and Perisini
-#                 for from_role in working_roles: # from roles are rows of sync_coef matrix from guastello
-#
-#                     # calculate and store autocorrelation
-#                     Sync_Coefs.loc[from_role,from_role] = acf(E4_tab[from_role],unbiased=True, nlags=offset)[offset]
-#
-#                     to_roles = [role for role in working_roles if role != from_role] # gets all other roles
-#                     for to_role in to_roles:
-#                         E4_temp = E4_tab.copy()
-#
-#                         # gets residuals from acf (controls for autocorrelation)... maybe better way to do this???
-#                         E4_temp.dropna(axis=0,inplace=True,how='any')
-#                         E4_temp = E4_temp.asfreq(freq=sampling_freq)
-#                         if use_residuals:
-#                             to_residuals =  AutoReg(E4_temp[to_role], lags = [offset]).fit().resid
-#                             to_residuals = pd.DataFrame({'TimeStamp':to_residuals.index, to_role:to_residuals.values})
-#                             to_residuals.set_index('TimeStamp', inplace = True)
-#                             E4_temp.drop(columns=to_role, inplace = True)
-#                             E4_temp = E4_temp.merge(to_residuals, on = 'TimeStamp', how = 'outer')
-#                         else: pass
-#
-#                         E4_temp[to_role] = E4_temp[to_role].tshift(periods=(offset*-1),freq=sampling_freq)
-#                         E4_temp.dropna(axis=0,inplace=True,how='any')
-#
-#                         '''
-#                         HEY! below where it says .corr(method=corr_method) is where you can plug in any python function that takes two arrays
-#                         and returns a float. Right now it's set above and does a pearson corrleation. There may be better ways to do this all around,
-#                         but if you believe the docs the .corr method will take any function you define.
-#                         '''
-#
-#                         coef_matrix = E4_temp[[from_role,to_role]].corr(method=corr_method) # RIGHT HERE!!!
-#                         Sync_Coefs.loc[from_role,to_role] = coef_matrix.loc[from_role,to_role]
-#
-#
-#                 # saves AR, driver and empath scores
-#                 Sync_df.loc[i,'Task_num'] = row['Task_num']
-#                 print(row['Task_num'])
-#                 highest_empath = ()
-#                 Sync_Coefs_sq = np.square(Sync_Coefs) # added to
-#                 for role in working_roles:
-#
-#                     Sync_df.loc[i,str(role+'_AR_'+measure)] = Sync_Coefs.loc[role,role]
-#                     #Sync_Coefs = np.square(Sync_Coefs)
-#                     e_score = Sync_Coefs_sq[role].sum() #empath scores
-#                     Sync_df.loc[i,str(role+'_Empath_'+measure)] = e_score
-#                     if not highest_empath:
-#                         highest_empath = (role,e_score)
-#                     elif highest_empath[1] < e_score:
-#                         highest_empath = (role,e_score)
-#                     else: pass
-#                     Sync_df.loc[i,str(role+'_Driver_'+measure)] = Sync_Coefs_sq.loc[role,working_roles].sum(axis=0) #driver scores
-#
-#                 # saves Se score
-#                 if highest_empath:
-#                     empath = highest_empath[0]
-#                     V_prime = Sync_Coefs_sq[empath].copy()
-#                     V_prime.drop(index=empath,inplace=True)
-#                     M = Sync_Coefs_sq.drop(columns=empath)
-#                     M.drop(index=empath,inplace=True)
-#                     if not M.isnull().values.any(): #skips if there is missing info.. need to figure out why it would get here and be empty
-#                         M1 = M.astype('float',copy=True)
-#                         M_inv = pd.DataFrame(data = np.linalg.pinv(M1.values),columns=M1.columns,index=M1.index)
-#                         Q = M_inv.dot(V_prime)
-#                         Sync_df.loc[i,Se] = V_prime.dot(Q)
-#                         print(V_prime.dot(Q))
-#                     else:
-#                         Sync_df.loc[i,Se] = 99
-#                         print('No getting to Se calc..')
-#                         print(M)
-#                 else: print('no highest empath?')
-#             else: pass
-# m = '_'.join(measures)
-# out_file = 'Sync_df_{}-{}offset_{}residuals_{}corrMethod_runOn_{}.csv'.format(m,str(offset),str(use_residuals),corr_method,datetime.date(datetime.now()))
-# Sync_df.to_csv(os.path.join(os.getcwd(),'Synch_outputs',out_file),index=False)
-# %bell
+def get_e4_data_for_sync(e4_ids, shift_start, shift_end, measure, sampling_freq):
+
+    #connect to db... This is slow (reconnects for each person / shift; but this is all just workaround)
+    db_loc = "/Users/mrosen44/Documents/Data_Analysis_Local/PICU_CAL/data/"
+    db_name = 'PICU_E4_data.db'
+    engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
+    metadata = sa.MetaData(bind=engine)
+    metadata.reflect()
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+
+    E4_tab = pd.DataFrame(data = None) # One dataframe for all of the E4 data for specific task
+    df_list = []
+    all_E4s_inData = True # flag used to stop synch calculations if there is missing E4 data for a task
+
+    for e4 in e4_ids:
+        t_name = 'Table_'+e4+'_'+measure
+        print(t_name)
+        try:
+            t = metadata.tables[t_name]
+            s = sa.select([t]).where(sa.and_(t.c.TimeStamp >= shift_start,t.c.TimeStamp <= shift_end))
+            rp = connection.execute(s)
+            data = pd.DataFrame(rp.fetchall())
+        except:
+            print('Problem with DB for... '+t_name)
+            all_E4s_inData = False # will stop further synch calculations below
+        if data.empty:
+            print('No data in DB...'+t_name)
+            all_E4s_inData = False
+        else:
+            data.columns = rp.keys()
+            data.TimeStamp = pd.to_datetime(data.TimeStamp)
+            data.TimeStamp = data.TimeStamp.dt.tz_localize(pytz.timezone('US/Eastern')) # E4 timestamps are stored in utc
+            data.set_index('TimeStamp', inplace = True)
+
+            ### Creates energy metric for ACC data
+            if measure == 'ACC':
+                data = create_ACC_energy_metric(data)
+            else: pass
+
+            ### resamples to the set sampling frequency (in config file)
+            data = data.resample(sampling_freq).mean()
+
+            ### renames data column to device id
+            data.columns = [e4]
+            ### adds E4_data for one role to the overall E4_tab dataframe
+            if E4_tab.empty:
+                E4_tab = data.copy()
+            else:
+                E4_tab = E4_tab.merge(data, on = 'TimeStamp', how = 'outer')
+    pre_len = len(E4_tab)
+    E4_tab = E4_tab.dropna(axis = 'index', how = 'any')
+    if E4_tab.empty:
+        all_E4s_inData = False
+        prop_missing = 1
+    else:
+        prop_missing = 1 - (len(E4_tab)/pre_len)
+    print("Proportion missing... "+str(prop_missing))
+    return(E4_tab, all_E4s_inData,prop_missing)
+
+def time_blockify(time_period, shift_start):
+    time_block_offsets = {
+        'all_shift':{'start':timedelta(hours = 0), 'end':timedelta(hours = 12)},
+        'block_1':{'start':timedelta(hours = 0), 'end':timedelta(hours = 4)},
+        'block_2':{'start':timedelta(hours = 4), 'end':timedelta(hours = 8)},
+        'block_3':{'start':timedelta(hours = 8), 'end':timedelta(hours = 12)}
+    }
+    shift_start = shift_start + time_block_offsets[time_period]['start']
+    shift_end = shift_start + time_block_offsets[time_period]['end']
+    return(shift_start, shift_end)
+
+def get_sync_coef_py(e4_data, offset, use_residuals, corr_method, sampling_freq):
+    working_roles = list(e4_data.columns.values)
+    # start_len = len(e4_data)
+    # e4_data = e4_data.dropna(axis = 'index', how = 'any')
+    # prop_missing = 1 - (len(e4_data)/start_len)
+    # print("Proportion missing... "+str(prop_missing)) # need to save this somehow
+    Sync_Coefs = pd.DataFrame(index=working_roles,columns=working_roles,data=None)
+    ### Creates Table 1 in Guastello and Perisini
+    for from_role in working_roles: # from roles are rows of sync_coef matrix from guastello
+        ### calculate and store autocorrelation
+        Sync_Coefs.loc[from_role,from_role] = acf(e4_data[from_role],fft = False, nlags=offset)[offset]
+        to_roles = [role for role in working_roles if role != from_role] # gets all other roles
+        for to_role in to_roles:
+            E4_temp = e4_data.copy()
+            # gets residuals from acf (controls for autocorrelation)... maybe better way to do this???
+            E4_temp.dropna(axis=0,inplace=True,how='any')
+            E4_temp = E4_temp.asfreq(freq=sampling_freq)
+
+            if use_residuals: # THIS ISN'T WORKING CURRENTYL (SAME/SIMILAR CODE IS WORKING IN NASA... SO?)
+                to_residuals = AutoReg(E4_temp[to_role], lags = [offset]).fit()#.resid
+                to_residuals = pd.DataFrame({'TimeStamp':to_residuals.index, to_role:to_residuals.values})
+                to_residuals.set_index('TimeStamp', inplace = True)
+                E4_temp.drop(columns=to_role, inplace = True)
+                E4_temp = E4_temp.merge(to_residuals, on = 'TimeStamp', how = 'outer')
+            else: pass
+            E4_temp[to_role] = E4_temp[to_role].shift(periods=(offset*-1),freq=sampling_freq)
+            E4_temp.dropna(axis=0,inplace=True,how='any')
+            '''
+            HEY! below where it says .corr(method=corr_method) is where you can plug in any python function that takes two arrays
+            and returns a float. Right now it's set above and does a pearson corrleation. There may be better ways to do this all around,
+            but if you believe the docs the .corr method will take any function you define.
+            '''
+            coef_matrix = E4_temp[[from_role,to_role]].corr(method=corr_method) # RIGHT HERE!!!
+            Sync_Coefs.loc[from_role,to_role] = coef_matrix.loc[from_role,to_role]
+    return(Sync_Coefs, working_roles)
+
+def update_sync_metrics(Sync_df, Sync_Coefs, working_roles, measure, shift_num, time_period):
+    Sync_Coefs_sq = np.square(Sync_Coefs) # added to
+    for role in working_roles:
+        Sync_df = Sync_df.append({
+                        'shift': shift_num,
+                        'part_id': role,
+                        'time_period': time_period,
+                        'measure': measure,
+                        'metric': 'AR',
+                        'value': Sync_Coefs.loc[role,role]
+                        }, ignore_index = True)
+        Sync_df = Sync_df.append({
+                            'shift': shift_num,
+                            'part_id': role,
+                            'time_period': time_period,
+                            'measure': measure,
+                            'metric': 'Empath',
+                            'value': Sync_Coefs_sq[role].sum() #empath scores
+                            }, ignore_index = True)
+        Sync_df = Sync_df.append({
+                            'shift': shift_num,
+                            'part_id': role,
+                            'time_period': time_period,
+                            'measure': measure,
+                            'metric': 'Driver',
+                            'value': Sync_Coefs_sq.loc[role,working_roles].sum(axis=0) #driver scores
+                            }, ignore_index = True)
+    return(Sync_df)
+
+def update_shift_metrics(Shift_metric_df, prop_missing, measure, shift_num, time_period):
+    Shift_metric_df = Shift_metric_df.append({
+        'shift': shift_num,
+        'time_period': time_period,
+        'measure': measure,
+        'prop_missing': prop_missing,
+        'Se': 99
+    }, ignore_index=True)
+    return(Shift_metric_df)
+
+def get_synchronies_py(shift_df,shift_num, measure, sync_metrics, sync_sampling_freq, sync_offset, sync_use_residuals, sync_corr_method):
+    shift_df['study_member_id'] = shift_df['study_member_id'].astype('int')
+    e4_ids = shift_df.e4_id.unique()
+    shift_num = shift_num.shift_day.unique()[0]
+    shift_start = pd.Timestamp(shift_df.date.unique()[0]).tz_localize(pytz.timezone('US/Eastern'))
+    am_or_pm = shift_df.am_or_pm.unique()[0]
+    if am_or_pm == 'am':
+        shift_start = shift_start.replace(hour=7)
+    elif am_or_pm == 'pm':
+        shift_start = shift_start.replace(hour=19)
+    print(shift_start)
+    cols = ['shift','part_id','time_period','measure','metric','value']
+    Ind_Sync_df = pd.DataFrame(columns=cols,data=None,index=None)
+    cols = ['shift','time_period','measure','prop_missing','Se']
+    Shift_metric_df = pd.DataFrame(columns=cols,data=None,index=None)
+    for time_period in ['all_shift','block_1', 'block_2', 'block_3']:
+        shift_start, shift_end = time_blockify(time_period = time_period, shift_start = shift_start)
+        e4_data, all_E4s_inData, prop_missing = get_e4_data_for_sync(e4_ids = e4_ids, shift_start = shift_start, shift_end = shift_end, measure = measure, sampling_freq = sync_sampling_freq)
+        e4id_to_pid = dict(zip(shift_df.e4_id,shift_df.study_member_id))
+        e4_data.rename(columns = e4id_to_pid, inplace = True)
+        if all_E4s_inData:
+            Sync_Coefs, working_roles = get_sync_coef_py(e4_data = e4_data, offset = sync_offset,
+                                        use_residuals = sync_use_residuals, corr_method = sync_corr_method,
+                                        sampling_freq = sync_sampling_freq)
+            Ind_Sync_df = update_sync_metrics(Sync_df = Ind_Sync_df, Sync_Coefs = Sync_Coefs, working_roles = working_roles,
+                                        measure = measure, shift_num = shift_num, time_period = time_period)
+            Shift_metric_df = update_shift_metrics(Shift_metric_df =Shift_metric_df, prop_missing = prop_missing, measure = measure, shift_num = shift_num, time_period = time_period)
+        else: pass
+    # Does not work... need to figure out how to save team level metrics
+    #return({"individual_metrics":Ind_Sync_df,"shift_metrics":Shift_metric_df})
+    return({'ind_data':Ind_Sync_df,'shift_data':Shift_metric_df})
+### This was written because R does not deal well with filtering timestamp in sqlite dbs.
+### We can likely get rid of this (and just use dbplyr in parent R script) once we come up with
+### a better db solution for all of this (postgress housed somwehere accessible to everyone)
+def pull_e4_data_py(t_name,shift_start,shift_stop):
+    # format timestamps
+    # they were not being passed from R cleanly. They were showing up as ndarray with one item.
+    # hence the [0] indexing to get the actual timestamp. The timezone info was not coming through either.
+    # hence setting them to utc and converting to eastern.
+    #print(shift_start)
+    shift_start = pd.Timestamp(shift_start[0]).tz_localize(pytz.timezone('UTC')).tz_convert(pytz.timezone('US/Eastern')) # for some reason, the times are comign in as nd.arrays
+    #print(shift_start)
+    #print(shift_stop)
+    shift_stop = pd.Timestamp(shift_stop[0]).tz_localize(pytz.timezone('UTC')).tz_convert(pytz.timezone('US/Eastern')) # for some reason, the times are comign in as nd.arrays
+    #print(shift_stop)
+    # connect to db... This is slow (reconnects for each person / shift; but this is all just workaround)
+    db_loc = "/Users/mrosen44/Documents/Data_Analysis_Local/PICU_CAL/data/"
+    db_name = 'PICU_E4_data.db'
+    engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
+    metadata = sa.MetaData(bind=engine)
+    metadata.reflect()
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+
+    t = metadata.tables[t_name]
+    s = sa.select([t]).where(sa.and_(t.c.TimeStamp >= shift_start,t.c.TimeStamp <= shift_stop))
+    rp = connection.execute(s)
+    data = pd.DataFrame(rp.fetchall())
+    if not data.empty:
+        data.columns = rp.keys()
+    return(data)
