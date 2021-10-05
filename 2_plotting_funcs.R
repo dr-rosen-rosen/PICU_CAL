@@ -26,7 +26,7 @@ get_E4_plot <- function(measure, shift, tracking_df) {
       ungroup()
     p <- ggplot(df, aes(x=time_interval, y = indvidual)) +
       geom_tile(aes(fill = AvgEnergy), colour = "white", na.rm = TRUE)  +
-      theme_light() +
+      theme_tufte() +
       scale_fill_viridis(discrete=FALSE) +
       ylab(lab_text[[measure]])
   } else {
@@ -39,9 +39,10 @@ get_E4_plot <- function(measure, shift, tracking_df) {
       ylab(lab_text[[measure]]) +
     #scale_x_datetime(breaks = lubridate::hms(t_breaks)) +
     theme_tufte()
+    p <- ggplotly(p)
   }
-  return(ggplotly(p))
+  return(p)
 }
 
-test <- get_E4_plot(measure = 'ACC', shift = 'Shift_03', tracking_df = tracking_df)
-test2 <- ggplotly(test)
+# test <- get_E4_plot(measure = 'ACC', shift = 'Shift_03', tracking_df = tracking_df)
+# test2 <- ggplotly(test)

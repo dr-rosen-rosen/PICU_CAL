@@ -23,14 +23,14 @@ ui <- fluidPage(
       selectInput(inputId = "shift",label = "Select a shift",
                   choices = c('',unique(tracking_df$shift_day)),
                   selected = NULL,
-                  multiple = F)
+                  multiple = F), width = 3
     ),
     
     # Show a plot of the generated distribution
     mainPanel(
       plotlyOutput("edaPlot"),
-      plotlyOutput("hrPlot")#,
-      #plotlyOutput('accPlot')
+      plotlyOutput("hrPlot"),
+      plotOutput('accPlot')
     )
   )
 )
@@ -44,9 +44,9 @@ server <- function(input, output) {
   output$hrPlot <- renderPlotly({
     get_E4_plot(measure = 'HR', shift = input$shift, tracking_df = tracking_df)
   })
-  # output$accPlot <- renderPlotly({
-  #   get_E4_plot(measure = 'ACC', shift = input$shift, tracking_df = tracking_df)
-  # })
+  output$accPlot <- renderPlot({
+    get_E4_plot(measure = 'ACC', shift = input$shift, tracking_df = tracking_df)
+  })
 }
 
 # Run the application 

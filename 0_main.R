@@ -18,6 +18,7 @@ config <- config::get()
 Sys.setenv(RETICULATE_PYTHON = config$py_version)
 reticulate::source_python('1_funcs.py')
 source(here('1_funcs.R'), echo = TRUE)
+source(here('2_plotting_funcs.R'), echo = TRUE)
 #source(here('2a_connect.R'), echo = TRUE)
 
 
