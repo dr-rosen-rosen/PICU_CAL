@@ -56,13 +56,20 @@ get_e4_SH(
   load_BVP = TRUE
 )
 
-rtls_df <- get_RTLS(
-  db_loc = config$RTLS_db_loc,
-  db_name = config$RTLS_db_name,
+rtls_df <- get_RTLS_pg(
+  db_u = config$RTLS_db_u,
+  db_pw = config$RTLS_db_pw,
   tracking_file_loc = config$tracking_file_loc,
   tracking_file = config$tracking_file, # tracking_file for SH handoff, analysis_file for custom pulls
   save_shifts = TRUE # if TRUE, will save csv's for each shift (for handoff to SH)
 )
+# rtls_df <- get_RTLS(
+#   db_loc = config$RTLS_db_loc,
+#   db_name = config$RTLS_db_name,
+#   tracking_file_loc = config$tracking_file_loc,
+#   tracking_file = config$tracking_file, # tracking_file for SH handoff, analysis_file for custom pulls
+#   save_shifts = TRUE # if TRUE, will save csv's for each shift (for handoff to SH)
+# )
 
 survey_data <- get_survey_data(
   f_loc = paste0(config$survey_f_loc,config$Survey_f_name),

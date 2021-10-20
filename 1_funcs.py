@@ -181,10 +181,123 @@ def get_e4_SH(db_name, db_loc,tracking_file_loc,tracking_file,download_path,load
                     print('Uh oh... missing table: '+Table_name)
             else:
                 print('skipping measure: '+measure)
+####################################################################################
+####################################################################################
+################ RTLS Scrpits for PG db
+####################################################################################
+####################################################################################
+# def locRecode_izer(df_chunk_pckged):
+#     '''Takes dataframe chunk and recodes it'''
+#     df_chunk = df_chunk_pckged[0]
+#     receiver_dict = df_chunk_pckged[1]
+#     receiverName_dict = df_chunk_pckged[2]
+#     df_chunk['Receiver_recode'] = df_chunk['Receiver'].replace(to_replace=receiver_dict, inplace=False)
+#     df_chunk['Receiver_name'] = df_chunk['Receiver'].replace(to_replace=receiverName_dict,inplace=False)
+#     df_chunk['Duration'] = (df_chunk.Time_Out - df_chunk.Time_In).astype('timedelta64[s]')/60
+#     return df_chunk
+#
+# def locRecode_parallel_izer(func,badge_data,receiver_dict, receiverName_dict, num_processes):
+#     '''Takes a function and dataframe, chunks up by badge'''
+#     if num_processes==None:
+#         num_processes = cpu_count()#min(df.shape[1], cpu_count())
+#     with closing(Pool(num_processes)) as pool:
+#         # creates list of data frames for each badge
+#         df_chunks = [badge_data[badge_data.RTLS_ID == ID].copy() for ID in badge_data.RTLS_ID.unique()]
+#         df_chunks_pckged = [[df_chunk,receiver_dict,receiverName_dict] for df_chunk in df_chunks] # packages dicts with each data chunk
+#         results_list = pool.map(func, df_chunks_pckged)
+#         pool.terminate()
+#         return pd.concat(results_list)#, axis=1)
+
+def loc_code_badge_data_pg(badge_data, db_u, db_pw):
+    #### This recodes a set of worn badges using reciever recodes stored in reciever tables
+    ####
+    # connect to db
+    df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_jhh' # Format for ps string: dialect+driver://username:password@host:port/database
+    engine = sa.create_engine(df_string)
+    metadata = sa.MetaData(bind=engine)
+    metadata.reflect()
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+    RTLS_Receivers = metadata.tables['rtls_receivers']
+
+    # get all recievers w/o a location code
+    rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
+    receivers = pd.DataFrame(rp.fetchall())
+    if receivers.empty:
+        print('Problem mapping recievers to badge data.')
+        return None
+    else:
+        receivers.columns = rp.keys()
+        receiver_dict = receivers.set_index('receiver')['location_code'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
+        receiverName_dict = receivers.set_index('receiver')['receiver_name'].to_dict()
+        num_processes = 4
+        df_loc_coded = locRecode_parallel_izer(
+            func = locRecode_izer,
+            badge_data = badge_data,
+            receiver_dict = receiver_dict,
+            receiverName_dict = receiverName_dict,
+            num_processes = 4
+            )
+        return df_loc_coded
+
+def get_RTLS_pg(db_u, db_pw, tracking_file_loc,tracking_file, save_shifts):
+    # connect to db..
+    df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_jhh' # Format for ps string: dialect+driver://username:password@host:port/database
+    engine = sa.create_engine(df_string)
+    metadata = sa.MetaData(bind=engine)
+    metadata.reflect()
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+    #insp = inspect(engine)
+    '''
+    Read in tracking sheet to get list of shifts ready to pull data'''
+    shift_tracking = pd.read_excel(os.path.join(tracking_file_loc,tracking_file))
+    shift_tracking = shift_tracking[shift_tracking.rtls_in_db == 1] # keep only shifts with rtls data loaded into the db
+    shift_tracking = shift_tracking[shift_tracking.rtls_final_export != 1] # keep only shifts wihout final data pulled
+
+    keeps = ['shift_day','date','rtls_id','am_or_pm']
+    badges = shift_tracking[keeps].copy()
+    badges['date'] = pd.to_datetime(badges['date'])
+    badges.date = badges.date.dt.normalize()
+
+    badges['start'] = np.where(
+        badges.am_or_pm == 'am',
+        badges.date + pd.Timedelta(7, unit = 'hours'),
+        badges.date + pd.Timedelta(19, unit = 'hours'))
+    badges['end'] = badges.start + pd.Timedelta(12, unit = 'hours')
+    #badges['shift_num'] = badges.shift_day.str.rsplit('_',expand=True)[1] # I think this should be dropped; not used anywhere
+    #badges[badges.am_or_pm == 'pm'].head()
+    shift_list = []
+    for shift in badges.shift_day.unique():
+        print(len(badges[badges.shift_day == shift]))
+        df_list = []
+        for i, badge in badges[badges.shift_day == shift].iterrows():
+            Table_name = 'Table_'+str(badge.rtls_id)
+            if sa.inspect(engine).has_table(Table_name): #engine.dialect.has_table(engine, Table_name):
+                RTLS_data = metadata.tables[Table_name]
+                s = sa.select([RTLS_data]).where(sa.and_(RTLS_data.c.Time_In >= badge.start,RTLS_data.c.Time_In <= badge.end))
+                rp = connection.execute(s)
+                badge_df = pd.DataFrame(rp.fetchall())
+                if not badge_df.empty:
+                    badge_df.columns = rp.keys()
+                    badge_df['RTLS_ID'] =  badge.rtls_id
+                    df_list.append(badge_df)
+                else: print('Missing DATA for badge... '+str(badge))
+            else: print('Missing TABLE for badge... '+str(badge))
+        if len(df_list) > 0:
+            df = pd.concat(df_list)
+            df = loc_code_badge_data_pg(badge_data = df,db_u = db_u,db_pw = db_pw)
+            if save_shifts:
+                df.to_csv(os.path.join(tracking_file_loc,shift,'RTLS_data',str(shift)+'_RTLS.csv'),index=False) #update this to save in appropriate directory
+            df['Shift'] = shift
+            shift_list.append(df)
+        else: print('No data!!!')
+        print(len(df))
+    return(pd.concat(shift_list))
 
 ####################################################################################
 ####################################################################################
-################ RTLS Scrpits
+################ OLD RTLS Scrpits for sqlite db
 ####################################################################################
 ####################################################################################
 def locRecode_izer(df_chunk_pckged):
