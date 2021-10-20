@@ -4,6 +4,8 @@ default:
     # Currently these are only accessible to Mike
     E4_db_loc: "/Users/mrosen44/Documents/Data_Analysis_Local/PICU_CAL/data/" #'/Users/mrosen44/OneDrive - Johns Hopkins University/Data_Analysis/PICU_CAL/E4_Data/'
     E4_db_name: 'PICU_E4_data.db'
+    RTLS_db_u: 'script_monkey'
+    RTLS_db_pw: 'cocobolo32'
     RTLS_db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/'
     RTLS_db_name: 'RTLS_030819.db'
     Survey_f_name: "PICU_RawSurveyData_update_061821.csv"
