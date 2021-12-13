@@ -272,15 +272,15 @@ def get_RTLS_pg(db_u, db_pw, tracking_file_loc,tracking_file, save_shifts):
         print(len(badges[badges.shift_day == shift]))
         df_list = []
         for i, badge in badges[badges.shift_day == shift].iterrows():
-            Table_name = 'Table_'+str(badge.rtls_id)
+            Table_name = 'table_'+str(badge.rtls_id)
             if sa.inspect(engine).has_table(Table_name): #engine.dialect.has_table(engine, Table_name):
                 RTLS_data = metadata.tables[Table_name]
-                s = sa.select([RTLS_data]).where(sa.and_(RTLS_data.c.Time_In >= badge.start,RTLS_data.c.Time_In <= badge.end))
+                s = sa.select([RTLS_data]).where(sa.and_(RTLS_data.c.time_in >= badge.start,RTLS_data.c.time_in <= badge.end))
                 rp = connection.execute(s)
                 badge_df = pd.DataFrame(rp.fetchall())
                 if not badge_df.empty:
                     badge_df.columns = rp.keys()
-                    badge_df['RTLS_ID'] =  badge.rtls_id
+                    badge_df['rtls_id'] =  badge.rtls_id
                     df_list.append(badge_df)
                 else: print('Missing DATA for badge... '+str(badge))
             else: print('Missing TABLE for badge... '+str(badge))
@@ -289,10 +289,10 @@ def get_RTLS_pg(db_u, db_pw, tracking_file_loc,tracking_file, save_shifts):
             df = loc_code_badge_data_pg(badge_data = df,db_u = db_u,db_pw = db_pw)
             if save_shifts:
                 df.to_csv(os.path.join(tracking_file_loc,shift,'RTLS_data',str(shift)+'_RTLS.csv'),index=False) #update this to save in appropriate directory
-            df['Shift'] = shift
+            df['shift'] = shift
             shift_list.append(df)
         else: print('No data!!!')
-        print(len(df))
+        #print(len(df))
     return(pd.concat(shift_list))
 
 ####################################################################################
@@ -305,9 +305,9 @@ def locRecode_izer(df_chunk_pckged):
     df_chunk = df_chunk_pckged[0]
     receiver_dict = df_chunk_pckged[1]
     receiverName_dict = df_chunk_pckged[2]
-    df_chunk['Receiver_recode'] = df_chunk['Receiver'].replace(to_replace=receiver_dict, inplace=False)
-    df_chunk['Receiver_name'] = df_chunk['Receiver'].replace(to_replace=receiverName_dict,inplace=False)
-    df_chunk['Duration'] = (df_chunk.Time_Out - df_chunk.Time_In).astype('timedelta64[s]')/60
+    df_chunk['Receiver_recode'] = df_chunk['receiver'].replace(to_replace=receiver_dict, inplace=False)
+    df_chunk['Receiver_name'] = df_chunk['receiver'].replace(to_replace=receiverName_dict,inplace=False)
+    df_chunk['Duration'] = (df_chunk.time_out - df_chunk.time_in).astype('timedelta64[s]')/60
     return df_chunk
 
 def locRecode_parallel_izer(func,badge_data,receiver_dict, receiverName_dict, num_processes):
@@ -316,7 +316,7 @@ def locRecode_parallel_izer(func,badge_data,receiver_dict, receiverName_dict, nu
         num_processes = cpu_count()#min(df.shape[1], cpu_count())
     with closing(Pool(num_processes)) as pool:
         # creates list of data frames for each badge
-        df_chunks = [badge_data[badge_data.RTLS_ID == ID].copy() for ID in badge_data.RTLS_ID.unique()]
+        df_chunks = [badge_data[badge_data.rtls_id == ID].copy() for ID in badge_data.rtls_id.unique()]
         df_chunks_pckged = [[df_chunk,receiver_dict,receiverName_dict] for df_chunk in df_chunks] # packages dicts with each data chunk
         results_list = pool.map(func, df_chunks_pckged)
         pool.terminate()
@@ -329,20 +329,20 @@ def loc_code_badge_data(badge_data, db_name, db_loc):
     engine = sa.create_engine('sqlite:///'+db_loc+db_name)
     metadata = sa.MetaData(bind=engine)
     metadata.reflect()
-    RTLS_Receivers = metadata.tables['RTLS_Receivers']
+    RTLS_Receivers = metadata.tables['rtls_receivers']
     connection = engine.connect()
     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
 
     # get all recievers w/o a location code
-    rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
+    rp = connection.execute(sa.select([rtls_receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
     receivers = pd.DataFrame(rp.fetchall())
     if receivers.empty:
         print('Problem mapping recievers to badge data.')
         return None
     else:
         receivers.columns = rp.keys()
-        receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
-        receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
+        receiver_dict = receivers.set_index('receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
+        receiverName_dict = receivers.set_index('receiver')['ReceiverName'].to_dict()
         num_processes = 4
         df_loc_coded = locRecode_parallel_izer(
             func = locRecode_izer,
@@ -392,7 +392,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file, save_shifts):
                 badge_df = pd.DataFrame(rp.fetchall())
                 if not badge_df.empty:
                     badge_df.columns = rp.keys()
-                    badge_df['RTLS_ID'] =  badge.rtls_id
+                    badge_df['rtls_id'] =  badge.rtls_id
                     df_list.append(badge_df)
                 else: print('Missing DATA for badge... '+str(badge))
             else: print('Missing TABLE for badge... '+str(badge))
@@ -413,7 +413,7 @@ def get_RTLS(db_loc, db_name, tracking_file_loc,tracking_file, save_shifts):
 
 def relabel_nodes(df, nodes):
     node_dict = dict(zip(nodes.rec_num,nodes.id))
-    df['Receiver'] = df['Receiver'].map(node_dict)
+    df['receiver'] = df['receiver'].map(node_dict)
     return(df)
 
 ####################################################################################
