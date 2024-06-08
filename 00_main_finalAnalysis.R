@@ -1,6 +1,5 @@
 ### Main project file for final anlaysis / paper
 
-library(config)
 library(tidyverse)
 library(here)
 
@@ -49,7 +48,8 @@ survey_data <- survey_data %>%
   full_join(rtls_metrics, by = c('shift_day','study_member_id','time_point'))
 
 # Physio files, processed using the tpd project
-unob_df <- read.csv(here('data','PICU_df_physio_all_10-30-2023.csv')) %>% #read.csv('df_all.csv') %>%
+#unob_df <- read.csv(here('data','PICU_df_physio_all_10-30-2023.csv')) %>% 
+unob_df <- read.csv(here('data','PICU_df_physio_all_06-07-2024.csv')) %>% 
   filter(shift_day != 'Pilot_Day_6') %>%
   mutate(
     time_point = shift_chunk + 1,
