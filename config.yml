@@ -8,11 +8,11 @@ default:
     RTLS_db_pw: 'cocobolo32'
     RTLS_db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/'
     RTLS_db_name: 'RTLS_030819.db'
-    Survey_f_name: "PICU_RawSurveyData_update_061821.csv"
+    Survey_f_name: "PICU_RawSurveyData.csv"
     analysis_file: 'Custom_Process_PICU_Device_Assignment.xlsx'
     sync_sampling_freq: 'S'
     sync_corr_method: 'pearson'
-    sync_use_residuals: FALSE
+    sync_use_residuals: TRUE
     sync_measures: !expr c('EDA','HR')
     sync_metrics: !expr c('AR','Driver','Empath')
     sync_offset: 50 # Seconds to lag synchrony
@@ -21,11 +21,10 @@ mike:
     inherits: default
     E4_download_path: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
     tracking_file_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
-    survey_f_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/Data_Analysis/'
+    survey_f_loc: '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/'
 
 salar:
     inherits: default
     E4_download_path: '/Users/skhaleg1/OneDrive - Johns Hopkins/Project_CollectiveAllostaticLoad/PICU Data Collection/'
     tracking_file_loc: '/Users/skhaleg1/OneDrive - Johns Hopkins/Project_CollectiveAllostaticLoad/PICU Data Collection/'
     survey_f_loc: '/Users/skhaleg1/OneDrive - Johns Hopkins/Project_CollectiveAllostaticLoad/Data_Analysis/'
-

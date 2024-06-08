@@ -54,7 +54,17 @@ get_survey_data <- function(f_loc, write_file) {
     mutate(stressors_total = sum(c(stressors_1, stressors_2, stressors_3, stressors_4, 
                                    stressors_5, stressors_6, stressors_7, stressors_8, 
                                    stressors_9, stressors_10, stressors_11, stressors_12, 
-                                   stressors_13)))
+                                   stressors_13)),
+           stressors_team = sum(c(stressors_2, stressors_8, stressors_9, stressors_10, stressors_11, stressors_12)),
+           stressors_ind = sum(c(stressors_7, stressors_13)),
+           stressors_interpersonal = sum(c(stressors_5,stressors_6)),
+           stressors_org = sum(c(stressors_1, stressors_3, stressors_4)),
+           stressors_total_dich = if_else(stressors_total > 0, 1, 0),
+           stressors_team_dich = if_else(stressors_team > 0, 1, 0),
+           stressors_ind_dich = if_else(stressors_ind > 0, 1, 0),
+           stressors_interpersonal_dich = if_else(stressors_interpersonal > 0, 1, 0),
+           stressors_org_dich = if_else(stressors_org > 0, 1, 0)
+    )
   
   #creating a composite score for trust in teams, propensity to trust subscale
   picu_data <- picu_data %>%

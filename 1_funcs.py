@@ -466,7 +466,7 @@ def get_e4_data_for_sync(e4_ids, shift_start, shift_end, measure, sampling_freq)
         else:
             data.columns = rp.keys()
             data.TimeStamp = pd.to_datetime(data.TimeStamp)
-            data.TimeStamp = data.TimeStamp.dt.tz_localize(pytz.timezone('US/Eastern')) # E4 timestamps are stored in utc
+            # data.TimeStamp = data.TimeStamp.dt.tz_localize(pytz.timezone('US/Eastern')) # E4 timestamps are stored in utc
             data.set_index('TimeStamp', inplace = True)
 
             ### Creates energy metric for ACC data
@@ -494,37 +494,36 @@ def get_e4_data_for_sync(e4_ids, shift_start, shift_end, measure, sampling_freq)
     print("Proportion missing... "+str(prop_missing))
     return(E4_tab, all_E4s_inData,prop_missing)
 
-def time_blockify(time_period, shift_start):
+def time_blockify(time_period, abs_shift_start):
     time_block_offsets = {
         'all_shift':{'start':timedelta(hours = 0), 'end':timedelta(hours = 12)},
         'block_1':{'start':timedelta(hours = 0), 'end':timedelta(hours = 4)},
         'block_2':{'start':timedelta(hours = 4), 'end':timedelta(hours = 8)},
         'block_3':{'start':timedelta(hours = 8), 'end':timedelta(hours = 12)}
     }
-    shift_start = shift_start + time_block_offsets[time_period]['start']
-    shift_end = shift_start + time_block_offsets[time_period]['end']
+    shift_start = abs_shift_start + time_block_offsets[time_period]['start']
+    shift_end = abs_shift_start + time_block_offsets[time_period]['end']
     return(shift_start, shift_end)
 
 def get_sync_coef_py(e4_data, offset, use_residuals, corr_method, sampling_freq):
     working_roles = list(e4_data.columns.values)
-    # start_len = len(e4_data)
-    # e4_data = e4_data.dropna(axis = 'index', how = 'any')
-    # prop_missing = 1 - (len(e4_data)/start_len)
-    # print("Proportion missing... "+str(prop_missing)) # need to save this somehow
+
     Sync_Coefs = pd.DataFrame(index=working_roles,columns=working_roles,data=None)
     ### Creates Table 1 in Guastello and Perisini
     for from_role in working_roles: # from roles are rows of sync_coef matrix from guastello
         ### calculate and store autocorrelation
+        # print(from_role)
+        # print(len(e4_data[from_role]))
         Sync_Coefs.loc[from_role,from_role] = acf(e4_data[from_role],fft = False, nlags=offset)[offset]
         to_roles = [role for role in working_roles if role != from_role] # gets all other roles
         for to_role in to_roles:
             E4_temp = e4_data.copy()
-            # gets residuals from acf (controls for autocorrelation)... maybe better way to do this???
-            E4_temp.dropna(axis=0,inplace=True,how='any')
+            E4_temp.dropna(axis=0,inplace=True,how='any') # Need to be more careful about missing data
             E4_temp = E4_temp.asfreq(freq=sampling_freq)
-
-            if use_residuals: # THIS ISN'T WORKING CURRENTYL (SAME/SIMILAR CODE IS WORKING IN NASA... SO?)
-                to_residuals = AutoReg(E4_temp[to_role], lags = [offset]).fit()#.resid
+            # gets residuals from acf (controls for autocorrelation)... maybe better way to do this???
+            if use_residuals:
+                print('using residuals!')
+                to_residuals = AutoReg(E4_temp[to_role], lags = [offset]).fit().resid
                 to_residuals = pd.DataFrame({'TimeStamp':to_residuals.index, to_role:to_residuals.values})
                 to_residuals.set_index('TimeStamp', inplace = True)
                 E4_temp.drop(columns=to_role, inplace = True)
@@ -542,15 +541,18 @@ def get_sync_coef_py(e4_data, offset, use_residuals, corr_method, sampling_freq)
     return(Sync_Coefs, working_roles)
 
 def update_sync_metrics(Sync_df, Sync_Coefs, working_roles, measure, shift_num, time_period):
-    Sync_Coefs_sq = np.square(Sync_Coefs) # added to
+    Sync_Coefs_sq = np.square(Sync_Coefs)
+    highest_empath = ()
     for role in working_roles:
+        e_score = Sync_Coefs_sq[role].sum() #empath scores
+        d_score = Sync_Coefs_sq.loc[role,working_roles].sum(axis=0) #driver scores
         Sync_df = Sync_df.append({
                         'shift': shift_num,
                         'part_id': role,
                         'time_period': time_period,
                         'measure': measure,
                         'metric': 'AR',
-                        'value': Sync_Coefs.loc[role,role]
+                        'value': Sync_Coefs_sq.loc[role,role]
                         }, ignore_index = True)
         Sync_df = Sync_df.append({
                             'shift': shift_num,
@@ -558,7 +560,7 @@ def update_sync_metrics(Sync_df, Sync_Coefs, working_roles, measure, shift_num, 
                             'time_period': time_period,
                             'measure': measure,
                             'metric': 'Empath',
-                            'value': Sync_Coefs_sq[role].sum() #empath scores
+                            'value': e_score
                             }, ignore_index = True)
         Sync_df = Sync_df.append({
                             'shift': shift_num,
@@ -566,17 +568,41 @@ def update_sync_metrics(Sync_df, Sync_Coefs, working_roles, measure, shift_num, 
                             'time_period': time_period,
                             'measure': measure,
                             'metric': 'Driver',
-                            'value': Sync_Coefs_sq.loc[role,working_roles].sum(axis=0) #driver scores
+                            'value': d_score
                             }, ignore_index = True)
-    return(Sync_df)
+        if not highest_empath:
+            highest_empath = (role,e_score)
+        elif highest_empath[1] < e_score:
+            highest_empath = (role,e_score)
+        else: pass
 
-def update_shift_metrics(Shift_metric_df, prop_missing, measure, shift_num, time_period):
+    # calcluates Se score
+    if highest_empath:
+        empath = highest_empath[0]
+        V_prime = Sync_Coefs_sq[empath].copy()
+        V_prime.drop(index=empath,inplace=True)
+        M = Sync_Coefs_sq.drop(columns=empath)
+        M.drop(index=empath,inplace=True)
+        if not M.isnull().values.any(): #skips if there is missing info.. need to figure out why it would get here and be empty
+            M1 = M.astype('float',copy=True)
+            M_inv = pd.DataFrame(data = np.linalg.pinv(M1.values),columns=M1.columns,index=M1.index)
+            Q = M_inv.dot(V_prime)
+            Se = V_prime.dot(Q)
+            print(V_prime.dot(Q))
+        else:
+            Se = 99
+            print('No getting to Se calc..')
+            print(M)
+    else: print('no highest empath?')
+    return(Sync_df, Se)
+
+def update_shift_metrics(Shift_metric_df, Se, prop_missing, measure, shift_num, time_period):
     Shift_metric_df = Shift_metric_df.append({
         'shift': shift_num,
         'time_period': time_period,
         'measure': measure,
         'prop_missing': prop_missing,
-        'Se': 99
+        'Se': Se
     }, ignore_index=True)
     return(Shift_metric_df)
 
@@ -584,60 +610,61 @@ def get_synchronies_py(shift_df,shift_num, measure, sync_metrics, sync_sampling_
     shift_df['study_member_id'] = shift_df['study_member_id'].astype('int')
     e4_ids = shift_df.e4_id.unique()
     shift_num = shift_num.shift_day.unique()[0]
-    shift_start = pd.Timestamp(shift_df.date.unique()[0]).tz_localize(pytz.timezone('US/Eastern'))
+    abs_shift_start = pd.Timestamp(shift_df.date.unique()[0]) #.tz_localize(pytz.timezone('US/Eastern')) # 'absolute' shift time since it is modified in the loop; this stays constant
     am_or_pm = shift_df.am_or_pm.unique()[0]
     if am_or_pm == 'am':
-        shift_start = shift_start.replace(hour=7)
+        abs_shift_start = abs_shift_start.replace(hour=7)
     elif am_or_pm == 'pm':
-        shift_start = shift_start.replace(hour=19)
-    print(shift_start)
+        abs_shift_start = abs_shift_start.replace(hour=19)
+    print(abs_shift_start)
     cols = ['shift','part_id','time_period','measure','metric','value']
     Ind_Sync_df = pd.DataFrame(columns=cols,data=None,index=None)
     cols = ['shift','time_period','measure','prop_missing','Se']
     Shift_metric_df = pd.DataFrame(columns=cols,data=None,index=None)
     for time_period in ['all_shift','block_1', 'block_2', 'block_3']:
-        shift_start, shift_end = time_blockify(time_period = time_period, shift_start = shift_start)
+        shift_start, shift_end = time_blockify(time_period = time_period, abs_shift_start = abs_shift_start)
         e4_data, all_E4s_inData, prop_missing = get_e4_data_for_sync(e4_ids = e4_ids, shift_start = shift_start, shift_end = shift_end, measure = measure, sampling_freq = sync_sampling_freq)
-        e4id_to_pid = dict(zip(shift_df.e4_id,shift_df.study_member_id))
-        e4_data.rename(columns = e4id_to_pid, inplace = True)
-        if all_E4s_inData:
+        # e4id_to_pid = dict(zip(shift_df.e4_id,shift_df.study_member_id))
+        # e4_data.rename(columns = e4id_to_pid, inplace = True)
+        print(shift_start)
+        print(shift_end)
+        if all_E4s_inData & (prop_missing < .7):
             Sync_Coefs, working_roles = get_sync_coef_py(e4_data = e4_data, offset = sync_offset,
                                         use_residuals = sync_use_residuals, corr_method = sync_corr_method,
                                         sampling_freq = sync_sampling_freq)
-            Ind_Sync_df = update_sync_metrics(Sync_df = Ind_Sync_df, Sync_Coefs = Sync_Coefs, working_roles = working_roles,
+            Ind_Sync_df, Se = update_sync_metrics(Sync_df = Ind_Sync_df, Sync_Coefs = Sync_Coefs, working_roles = working_roles,
                                         measure = measure, shift_num = shift_num, time_period = time_period)
-            Shift_metric_df = update_shift_metrics(Shift_metric_df =Shift_metric_df, prop_missing = prop_missing, measure = measure, shift_num = shift_num, time_period = time_period)
+            Shift_metric_df = update_shift_metrics(Shift_metric_df = Shift_metric_df, Se = Se, prop_missing = prop_missing, measure = measure, shift_num = shift_num, time_period = time_period)
         else: pass
-    # Does not work... need to figure out how to save team level metrics
-    #return({"individual_metrics":Ind_Sync_df,"shift_metrics":Shift_metric_df})
     return({'ind_data':Ind_Sync_df,'shift_data':Shift_metric_df})
+
 ### This was written because R does not deal well with filtering timestamp in sqlite dbs.
 ### We can likely get rid of this (and just use dbplyr in parent R script) once we come up with
 ### a better db solution for all of this (postgress housed somwehere accessible to everyone)
-def pull_e4_data_py(t_name,shift_start,shift_stop):
-    # format timestamps
-    # they were not being passed from R cleanly. They were showing up as ndarray with one item.
-    # hence the [0] indexing to get the actual timestamp. The timezone info was not coming through either.
-    # hence setting them to utc and converting to eastern.
-    #print(shift_start)
-    shift_start = pd.Timestamp(shift_start[0]).tz_localize(pytz.timezone('UTC')).tz_convert(pytz.timezone('US/Eastern')) # for some reason, the times are comign in as nd.arrays
-    #print(shift_start)
-    #print(shift_stop)
-    shift_stop = pd.Timestamp(shift_stop[0]).tz_localize(pytz.timezone('UTC')).tz_convert(pytz.timezone('US/Eastern')) # for some reason, the times are comign in as nd.arrays
-    #print(shift_stop)
-    # connect to db... This is slow (reconnects for each person / shift; but this is all just workaround)
-    db_loc = "/Users/mrosen44/Documents/Data_Analysis_Local/PICU_CAL/data/"
-    db_name = 'PICU_E4_data.db'
-    engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
-    metadata = sa.MetaData(bind=engine)
-    metadata.reflect()
-    connection = engine.connect()
-    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-
-    t = metadata.tables[t_name]
-    s = sa.select([t]).where(sa.and_(t.c.TimeStamp >= shift_start,t.c.TimeStamp <= shift_stop))
-    rp = connection.execute(s)
-    data = pd.DataFrame(rp.fetchall())
-    if not data.empty:
-        data.columns = rp.keys()
-    return(data)
+# def pull_e4_data_py(t_name,shift_start,shift_stop):
+#     # format timestamps
+#     # they were not being passed from R cleanly. They were showing up as ndarray with one item.
+#     # hence the [0] indexing to get the actual timestamp. The timezone info was not coming through either.
+#     # hence setting them to utc and converting to eastern.
+#     #print(shift_start)
+#     shift_start = pd.Timestamp(shift_start[0]).tz_localize(pytz.timezone('UTC')).tz_convert(pytz.timezone('US/Eastern')) # for some reason, the times are comign in as nd.arrays
+#     #print(shift_start)
+#     #print(shift_stop)
+#     shift_stop = pd.Timestamp(shift_stop[0]).tz_localize(pytz.timezone('UTC')).tz_convert(pytz.timezone('US/Eastern')) # for some reason, the times are comign in as nd.arrays
+#     #print(shift_stop)
+#     # connect to db... This is slow (reconnects for each person / shift; but this is all just workaround)
+#     db_loc = "/Users/mrosen44/Documents/Data_Analysis_Local/PICU_CAL/data/"
+#     db_name = 'PICU_E4_data.db'
+#     engine = sa.create_engine(str('sqlite:///')+db_loc+db_name)
+#     metadata = sa.MetaData(bind=engine)
+#     metadata.reflect()
+#     connection = engine.connect()
+#     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+#
+#     t = metadata.tables[t_name]
+#     s = sa.select([t]).where(sa.and_(t.c.TimeStamp >= shift_start,t.c.TimeStamp <= shift_stop))
+#     rp = connection.execute(s)
+#     data = pd.DataFrame(rp.fetchall())
+#     if not data.empty:
+#         data.columns = rp.keys()
+#     return(data)
