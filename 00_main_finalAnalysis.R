@@ -62,7 +62,31 @@ unob_df <- read.csv(here('data','PICU_df_physio_all_06-07-2024.csv')) %>%
 skimr::skim(unob_df)
 # table(survey_data$cod)
 
+trait_df <- read_csv(here::here('data','picu_study_trait_final.csv')) |> select(-1) |>
+  rename(part_id = participant_id)
+rm_eye <- read_csv(here::here('data','picu_study_readingmindeyes_final.csv')) |> select(part_id, total_score) |>
+  rename(rm_eye_tot = total_score)
+trait_df_cmb <- full_join(trait_df,rm_eye) |>
+  select(-starts_with(c('co_','hex_')),-hexaco_total) |>
+  rename(
+    hx_hon = hexaco_honesty,
+    hx_emo = hexaco_emotionality,
+    hx_ext = hexaco_extraversion,
+    hx_agr = hexaco_agreeableness,
+    hx_con = hexaco_conscientiousness,
+    hx_opn = hexaco_openness,
+    co_aff = collective_orientation_affiliation,
+    co_dom = collective_orientation_dominance,
+    co_tot = collective_orientation_total
+  )
+
 cmb_df <- survey_data %>%
-  left_join(unob_df, by = c('shift_day', 'study_member_id', 'time_point'))# %>%
-# mutate(shift_day = as.character(shift_day))
+  left_join(unob_df, by = c('shift_day', 'study_member_id', 'time_point')) |>
+  ungroup() |>
+  rename(part_id = study_member_id) |>
+  left_join(trait_df_cmb, by = 'part_id')
 skimr::skim(cmb_df)
+
+
+
+                               
